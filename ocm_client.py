@@ -33,4 +33,6 @@ try:
     sock.send(username_bits)
     sock.send(message_bits)
 
-    
+finally:
+    print("closing socket")
+    sock.close()
