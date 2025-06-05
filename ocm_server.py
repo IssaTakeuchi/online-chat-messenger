@@ -11,7 +11,7 @@ server_port = 9001
 dpath = 'temp'
 if not os.path.exists(dpath):
     os.makedirs(dpath)
-    
+
 print('Starting up on {} port {}'.format(server_address,server_port))
 
 # ソケットをサーバーのアドレスをポートに紐付けする
@@ -37,4 +37,9 @@ while True:
 
         if data_length == 0:
             raise Exception('No data to raead from client.')
-        
+        else:
+            print('Message: {}'.format(data_length))
+
+    finally:
+        print("Closing current connection")
+        connection.close()
