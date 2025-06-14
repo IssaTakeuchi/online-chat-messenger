@@ -5,19 +5,13 @@ import os
 def protocol_header(username_length,data_length):
     return username_length.to_bytes(1,"big") + data_length.to_bytes(7,"big")
 
-sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 
 # サーバーが待ち受けているポートにソケットを接続する
 server_address = input("Type in the server's address to connect to: ")
 server_port = 9001
 
 print('connecting to {}'.format(server_address,server_port))
-
-try:
-    sock.connect((server_address,server_port))
-except socket.error as err:
-    print(err)
-    sys.exit(1)
 
 try:
     username = input('Type your name : ')
@@ -28,10 +22,14 @@ try:
 
     header = protocol_header(len(username_bits),len(message_bits))
 
-    sock.send(header)
+    # データを送信
+    sock.sendto(header,(server_address,server_port))
+    sock.sendto(username_bits,(server_address,server_port))
+    sock.sendto(message_bits,(server_address,server_port))
 
-    sock.send(username_bits)
-    sock.send(message_bits)
+    # データを受信
+    data,server =  sock.recvfrom(4096)
+    print('Received from server:',data.decode('utf-8'))
 
 finally:
     print("closing socket")
