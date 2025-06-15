@@ -2,6 +2,7 @@ import socket
 import sys
 import os 
 import select
+import time
 
 def protocol_header(username_length,data_length):
     return username_length.to_bytes(1,"big") + data_length.to_bytes(7,"big")
@@ -16,6 +17,10 @@ print('connecting to {}'.format(server_address,server_port))
 
 username = input('Type your name : ')
 username_bits = username.encode('utf-8')
+
+# ハートビート設定
+HEARTBEAT_INTERVAL_SECONDS = 30 # 30秒毎にハートビートを送信
+last_hearbeat_time = time.time()
 
 try:
     # サーバーに初回接続とユーザー名の通知
@@ -32,7 +37,20 @@ try:
     print("Type your message and press Enter. Type 'exit' to quit.")
 
     while True:
-        readable,_,_ = select.select([sys.stdin,sock],[],[])
+        # ハートビート送信のチェック
+        current_time = time.time()
+        if current_time - last_hearbeat_time > HEARTBEAT_INTERVAL_SECONDS:
+            heartbeat_message = f"HEARTBEAT:{username}" # ハートビートメッセージ
+            heartbeat_message_bits = heartbeat_message.encode('utf-8')
+            heartbeat_header = protocol_header(len(username_bits),len(heartbeat_message_bits))
+
+            sock.sendto(heartbeat_header,(server_address,server_port))
+            sock.sendto(username_bits,(server_address,server_port))
+            sock.sendto(heartbeat_message_bits,(server_address,server_port))
+            print(f"[{time.strftime('%H:%M:%S')}] Sent heartbeat.") # 送信確認用
+            last_hearbeat_time = current_time
+
+        readable,_,_ = select.select([sys.stdin,sock],[],[],1.0) # タイムアウトに1秒を設定
 
         for s in readable:
             if s == sys.stdin:
@@ -51,8 +69,11 @@ try:
                 
                 if message:
                     message_bits = message.encode('utf-8')
+                    MAX_MESSAGE_SIZE = 4096
+                    if len(message_bits) > MAX_MESSAGE_SIZE:
+                        print(f"Error: Your message ({len(message_bits)} bytes) exceeds the maximum allow size of {MAX_MESSAGE_SIZE} bytes. Please shorten your message.")
+                    
                     header = protocol_header(len(username_bits),len(message_bits))
-
                     sock.sendto(header,(server_address,server_port))
                     sock.sendto(username_bits,(server_address,server_port))
                     sock.sendto(message_bits,(server_address,server_port))
