@@ -29,7 +29,7 @@ def check_password(room_name, password): # チャットルームのパスワー�
         return False
 
 
-def create_chatroom(room_name,state,username):
+def create_chatroom(room_name,state,username,password):
     # チャットルームが既に存在するか確認
     if room_name in chatroom:
         print(f"Chat room '{room_name}' already exists.")
@@ -48,21 +48,14 @@ def create_chatroom(room_name,state,username):
             'host': username,  # ホストのユーザー名を保存
             'users': [username] # 初期ユーザーとしてホストのユーザー名を追加
         }
-        print(f"Chat room '{room_name}' created successfully.")
-
-    # リクエストの応答（1）サーバーはステータスコードを含むペイロードで即座に応答する
-    if state == 1:
-        print(f"Chat room '{room_name}' is ready to use.")
-        # クライアントにチャットルームの情報を返す
-        return {
-            'status': 'success',
-            'room_name': room_name,
-        }
-    # リクエストの完了（2）サーバは特定の生成されたユニークなトークンをクライアントに送り、
-    # このトークンにユーザー名を割り当てる
-    # このトークンはクライアントをチャットルームのホストとして認識する
-    if state == 2:
-        print(f"Chat room '{room_name}' is now active.")
+        
+        # リクエストの応答（1）サーバーはステータスコードを含むペイロードで即座に応答する
+        state = 1
+        print(f"Chat room '{room_name}' created successfully.status: {state}")
+    
+        # リクエストの完了（2）サーバは特定の生成されたユニークなトークンをクライアントに送り、
+        # このトークンにユーザー名を割り当てる
+        # このトークンはクライアントをチャットルームのホストとして認識する
         # usernametokenを生成
         usernametoken = f"user_{random.randint(1000, 9999)}"
 
@@ -71,13 +64,14 @@ def create_chatroom(room_name,state,username):
         print(f"User '{username}' has been assigned token '{usernametoken}' in room '{room_name}'.")
         
         chatroom[room_name]['users'].append(usernametoken)
+        state = 2
         return {
             'status': 'success',
             'room_name': room_name,
             'usernametoken': usernametoken,
         }
 
-def enter_chatroom(room_name,state,username):
+def enter_chatroom(room_name,state,username,password):
     # サーバの初期化（0）クライアントが既存のチャットルームに参加するリクエストを送信
     if state == 0:
         print(f"Joining chat room: {room_name} as user: {username}")
@@ -88,23 +82,22 @@ def enter_chatroom(room_name,state,username):
             print(f"Chat room '{room_name}' does not exist.")
             return None
 
-    # リクエストの応答（1）サーバーはステータスコードを含むペイロードで即座に応答する
-    if state == 1:
-        print(f"User '{username}' is now in chat room '{room_name}'.")
-        return {
-            'status': 'success',
-            'room_name': room_name,
-        }
+        # リクエストの応答（1）サーバーはステータスコードを含むペイロードで即座に応答する
+        state = 1
+        print(f"Chat room '{room_name}' created successfully.status: {state}")
     
-    # リクエストの完了（2）サーバは特定の生成されたユニークなトークンをクライアントに送り、
-    # このトークンにユーザー名を割り当てる
-    # このトークンはクライアントをチャットルームのホストとして認識する
-    if state == 2:
+        # リクエストの完了（2）サーバは特定の生成されたユニークなトークンをクライアントに送り、
+        # このトークンにユーザー名を割り当てる
+        # このトークンはクライアントをチャットルームのホストとして認識する
+        # usernametokenを生成
         usernametoken = f"user_{random.randint(1000, 9999)}"
+
+        # usernametokenとユーザー名を紐付ける
         usernametoken_dict[username] = usernametoken
         print(f"User '{username}' has been assigned token '{usernametoken}' in room '{room_name}'.")
         
         chatroom[room_name]['users'].append(usernametoken)
+        state = 2
         return {
             'status': 'success',
             'room_name': room_name,
@@ -146,7 +139,7 @@ def main():
 
             room_name = connection.recv(room_name_size).decode('utf-8')
 
-            response_data = {}
+            # response_data = {}
 
             if operation == 1: # create new chatroom
                 print(f"Creating new chat room: {room_name}")
@@ -154,9 +147,11 @@ def main():
                 # operation_payloadをデコード
 
                 # ここで新しいチャットルームを作成するロジックを追加
-                create_result = create_chatroom(room_name,state,username,password)
+                # response_data = create_chatroom(room_name,state,username,password)
+                create_chatroom(room_name,state,username,password)
                 response = f"Chat room '{room_name}' created successfully."
                 connection.sendall(response.encode('utf-8'))
+                connection.sendall(chatroom[room_name]['password'].encode('utf-8'))
 
             elif operation == 2: # join  existing chatroom
                 print(f"Joining chat room: {room_name}")
