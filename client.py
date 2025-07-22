@@ -1,6 +1,7 @@
 import socket
 import sys 
 import os
+import json
 
 # サーバーに送信されるプロトコルヘッダーを定義
 def protocol_header(room_name_size,operation,state,operation_payload_size):
@@ -9,7 +10,7 @@ def protocol_header(room_name_size,operation,state,operation_payload_size):
             state.to_bytes(1, "big") +
             operation_payload_size.to_bytes(29, "big"))
 
-def main():
+def tcp_connect():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # サーバーのアドレスとポートを指定
@@ -65,8 +66,10 @@ def main():
 
         try:
             # サーバーからの応答を受信
-            response = sock.recv(1024)
-            print("Server response:", response.decode('utf-8'))
+            response_bytes = sock.recv(1024)
+            response_data = json.loads(response_bytes.decode('utf-8'))
+            print("Server response:", response_data)
+            return {server_address, server_port, username, room_name, response_data}
         except socket.error as e:
             print (f"Error receiving response: {e}")
 
@@ -91,14 +94,41 @@ def main():
         sock.sendall(len(username_bytes).to_bytes(1, "big") + username_bytes)
 
         try:
-            response = sock.recv(1024)
-            print("Server response:", response.decode('utf-8'))
+            response_bytes = sock.recv(1024)
+            response_data = json.loads(response_bytes.decode('utf-8'))
+            print("Server response:", response_data)
         except socket.error as e:
             print(f"Error receiving response: {e}")
 
     else :
         # sokketを閉じる
         sock.close()
+
+def udp_connect(server_address, server_port, username,room_name, usernametoken):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    print('connecting to room : {}'.format(room_name))
+
+    username_bits = username.encode('utf-8')
+#     # ヘッダーを作成
+#     クライアントがサーバに送信するパケットは、最大 4096 バイトのメッセージとなります。そのうちの最初の 2 バイトは、ルーム名とトークンのバイトサイズを示しています。
+# ヘッダー: RoomNameSize（1 バイト）| TokenSize（1 バイト）
+# ボディ: 最初の RoomNameSize バイトはルーム名、次の TokenSize バイトはトークン文字列、そしてその残りが実際のメッセージです。
+# クライアントはサーバから最大で 4094 バイトのパケットを受信できます。これはメッセージのみで、ヘッダーは含まれません。
+    header = protocol_header(len(username_bits), 0, 0, 0)
+
+    # ヘッダーとユーザー名を送信
+    sock.sendto(header, (server_address, server_port))
+    sock.sendto(username_bits, (server_address, server_port))
+
+    print(f"Connected to {server_address}:{server_port} as {username}.")
+
+def main():
+    server_address, server_port, username, room_name, response_data = tcp_connect()
+    usernametoken = response_data.get('usernametoken', None)
+
+    udp_connect(server_address, server_port, username, room_name, usernametoken)
+
 
 if __name__ == "__main__":
     main()
