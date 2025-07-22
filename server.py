@@ -77,7 +77,7 @@ def create_chatroom(room_name,state,username):
             'usernametoken': usernametoken,
             'state':current_state,
         }
-    return {'status':'erroe', 'message':'Invalid state for creating chat room.'}
+    return {'status':'error', 'message':'Invalid state for creating chat room.'}
 
 def enter_chatroom(room_name,state,username):
     # サーバの初期化（0）クライアントが既存のチャットルームに参加するリクエストを送信
