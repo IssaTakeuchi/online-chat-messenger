@@ -81,7 +81,7 @@ def create_chatroom(room_name,username):
 
 def enter_chatroom(room_name,username,password):
     # サーバの初期化（0）クライアントが既存のチャットルームに参加するリクエストを送信
-    if username not in chatrooms:
+    if room_name not in chatrooms:
         return {
             'status' :  'error',
             'message' : f"Chat room '{room_name}' does not exist."
@@ -124,15 +124,15 @@ def broadcast_udp_message(room_name,sender_username, message_text, exclude_addr 
     encoded_relay_message = relay_message.encode('utf-8')
 
     # ヘッダーは送信者ユーザー名とメッセージの長さを含む
-    sender_username_bytes = sender_username.encode('utf-8')
-    relay_header = protocol_header_udp_message(len(sender_username_bytes), len(encoded_relay_message))
-
+    # sender_username_bytes = sender_username.encode('utf-8')
+    full_packet = encoded_relay_message
+    
     for token, user_info in list(chatrooms[room_name]['users'].items()):
         target_addr = user_info.get('address')
         if target_addr and target_addr != exclude_addr:
             try:
                 # ヘッダー　＋　送信者ユーザー名バイト列　＋　メッセージバイト列を結合して送信
-                full_packet = relay_header + sender_username_bytes + encoded_relay_message
+                # full_packet = relay_header + sender_username_bytes + encoded_relay_message
                 udp_sock.sendto(full_packet, target_addr)
                 print(f"Relaying '{relay_message}' to {user_info['username']} at {target_addr}")
             except socket.error as e:
@@ -154,7 +154,7 @@ def main():
                 users_to_remove = []
                 for token, user_info in list (room_info['users'].items()):
                     if user_info.get('address') and current_time - user_info['last_activity'] > CLIENT_TIMEOUT_SECONDS:
-                        users_to_remove.append((token,user_info[' username']))
+                        users_to_remove.append((token,user_info['username']))
 
                 for token, username_to_remove in users_to_remove:
                     if token in room_info['users']:
@@ -253,56 +253,48 @@ def main():
                 try:
                     full_packet,client_addr = udp_sock.recvfrom(4096)
 
-                    # クライアントからのUDPヘッダーをパース
-                    # ヘッダー:RoomNameSize(１バイト)| TokenSize(１バイト)
-                    udp_header_from_client = full_packet[:2]
-                    room_name_size_udp = int.from_bytes(udp_header_from_client[:1],'big')
-                    usernametoken_size_udp = int.from_bytes(udp_header_from_client[1:2,'big'])
+                    # パケットをデコードし、ユーザー名トークンとメッセージに分割
+                    packet_content = full_packet.decode('utf-8')
+                    split_content = packet_content.split(":", 1)
 
-                    # ルーム名とユーザー名トークンを抽出
-                    offset = 2
-                    room_name_bytes_udp = full_packet[offset : offset + room_name_size_udp]
-                    room_name_udp = room_name_bytes_udp.decode('utf-8')
-                    offset += room_name_size_udp
+                    if len(split_content) < 2:
+                        print(f"Received malformed UDP packet from {client_addr}.")
+                        continue
 
-                    usernametoken_bytes_udp = full_packet[offset : offset + usernametoken_size_udp]
-                    usernametoken_udp = usernametoken_bytes_udp.decode('utf-8')
-                    offset += usernametoken_size_udp
+                    usernametoken_udp = split_content[0]
+                    message_content = split_content[1]
 
-                    # 残りの部分がメッセージのヘッダーとメッセー本体
-                    message_header_from_client = full_packet[offset : offset + 5] #５バイト
-                    username_len_in_message = int.from_bytes(message_header_from_client[:1],'big')
-                    message_len_in_message = int.from_bytes(message_header_from_client[1:5],'big')
-                    offset += 5
+                    room_name_udp = None
+                    sender_username = None
 
-                    #メッセージ送信者ユーザー名とメッセージ本体
-                    sender_username_bytes = full_packet[offset:offset + username_len_in_message]
-                    sender_username = sender_username_bytes.decode('utf-8')
-                    offset += username_len_in_message
+                    # ユーザー名トークンからルーム名とユーザー名を取得
+                    for room_name, room_data in chatrooms.items():
+                        if usernametoken_udp in room_data['users']:
+                            room_name_udp = room_name
+                            sender_username = room_data['users'][usernametoken_udp]['username']
+                            break
 
-                    message_content_bytes = full_packet[offset:offset + message_len_in_message]
-                    message_content = message_content_bytes.decode('utf-8')
+                    if not room_name_udp or not sender_username:
+                        print(f"Received message from unknown user: {usernametoken_udp}")
+                        continue
 
                     print(f'UDP Received from {client_addr} (Room: {room_name_udp}, User: {sender_username}, Token: {usernametoken_udp}): {message_content}')
 
                     # クライアントの最終活動時刻とアドレスを更新
-                    if room_name_udp in chatrooms and \
-                        usernametoken_udp in chatrooms[room_name_udp]['users']:
-                        user_info = chatrooms[room_name_udp]['users'][usernametoken_udp]
-                        user_info['last_activity'] = time.time()
-                        user_info['address'] = client_addr # UDPアドレスを更新、設定
+                    user_info = chatrooms[room_name_udp]['users'][usernametoken_udp]
+                    user_info['last_activity'] = time.time()
+                    user_info['address'] = client_addr # UDPアドレスを更新、設定
 
-                        if message_content.startswith("HEARTBEAT:"):
-                            print(f"Heartbeat from {sender_username} in room '{room_name_udp}'. Activity updated.")
-                        elif message_content.startswith("LEAVE:"):
-                            # ルームからユーザーを削除
-                            if usernametoken_udp in chatrooms[room_name_udp]['users']:
-                                del chatrooms[room_name_udp]['users'][usernametoken_udp]
-                                print(f"User {sender_username} ({usernametoken_udp}) left room '{room_name_udp}'.")
-                                broadcast_udp_message(room_name_udp,"Server",f"---{sender_username} has left the chat ---", exclude_addr=client_addr)
-                        else:
-                            # 通常のチャットメッセージをルーム内にブロードキャスト
-                            broadcast_udp_message(room_name_udp, message_content, exclude_addr = client_addr)
+                    if message_content=="HEARTBEAT":
+                        print(f"Heartbeat from {sender_username} in room '{room_name_udp}'. Activity updated.")
+                    elif message_content == "LEAVE":
+                        # ルームからユーザーを削除
+                        del chatrooms[room_name_udp]['users'][usernametoken_udp]
+                        print(f"User {sender_username} ({usernametoken_udp}) left room '{room_name_udp}'.")
+                        broadcast_udp_message(room_name_udp,"Server",f"---{sender_username} has left the chat ---", exclude_addr=client_addr)
+                    else:
+                        # 通常のチャットメッセージをルーム内にブロードキャスト
+                        broadcast_udp_message(room_name_udp, sender_username, message_content, exclude_addr = client_addr)
                 except Exception as e:
                     print(f"Error processing UDP message from {client_addr}: {e}")
 
