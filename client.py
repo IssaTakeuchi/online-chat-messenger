@@ -102,27 +102,20 @@ def udp_connect(server_address, server_port, username,room_name, usernametoken):
 
     if not all([server_address, server_port, username, room_name, usernametoken]):
         print("Invalid connection parameters for UDP chat. Aborting.")
-
+        return
+    
     print('connecting to room : {}'.format(room_name))
 
-    username_bits = username.encode('utf-8')
-    usernametoken_bits = usernametoken.encode('utf-8')
-    room_name_bits = room_name.encode('utf-8')
-#     # ヘッダーを作成
-#     クライアントがサーバに送信するパケットは、最大 4096 バイトのメッセージとなります。そのうちの最初の 2 バイトは、ルーム名とトークンのバイトサイズを示しています。
-# ヘッダー: RoomNameSize（1 バイト）| TokenSize（1 バイト）
-# ボディ: 最初の RoomNameSize バイトはルーム名、次の TokenSize バイトはトークン文字列、そしてその残りが実際のメッセージです。
-# クライアントはサーバから最大で 4094 バイトのパケットを受信できます。これはメッセージのみで、ヘッダーは含まれません。
-    udp_header_initial = protocol_header_udp(len(room_name_bits),len(usernametoken_bits))
-
-    initial_udp_payload = udp_header_initial + room_name_bits + usernametoken_bits
-
     chat_instance = ChatRoom()
-    chat_instance.enter_room(sock, server_address, server_port, username_bits, initial_udp_payload)
+    chat_instance.enter_room(sock, server_address, server_port, username, room_name, usernametoken)
 
 
 def main():
     server_address, server_port, username, room_name, response_data = tcp_connect()
+    if response_data is None:
+        print("Failed to connect to the server or retrieve response data.")
+        sys.exit(1)
+        
     usernametoken = response_data.get('usernametoken', None)
 
     if response_data.get('status') == 'success' and response_data.get('password'):
