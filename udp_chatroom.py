@@ -85,6 +85,8 @@ class ChatRoom:
                         # 受信したメッセージをデコードして表示
                         received_message = full_received_packet.decode('utf-8')
                         print(f"\n{received_message}")
+                        if "---host" in received_message and "has left the chat" in received_message:
+                            sys.exit()
                         
                         sys.stdout.write(f'{username} > ') # メッセージ受信後もプロンプトを表示
                         sys.stdout.flush() # プロンプトがすぐに見えるようにフラッシュ
