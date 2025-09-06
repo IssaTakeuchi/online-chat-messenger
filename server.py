@@ -288,10 +288,38 @@ def main():
                     if message_content=="HEARTBEAT":
                         print(f"Heartbeat from {sender_username} in room '{room_name_udp}'. Activity updated.")
                     elif message_content == "LEAVE":
-                        # ルームからユーザーを削除
-                        del chatrooms[room_name_udp]['users'][usernametoken_udp]
-                        print(f"User {sender_username} ({usernametoken_udp}) left room '{room_name_udp}'.")
-                        broadcast_udp_message(room_name_udp,"Server",f"---{sender_username} has left the chat ---", exclude_addr=client_addr)
+                        # ルームからユーザーを削除、ホストの場合はチャットルームを削除
+                        # ホストが退出した場合の処理
+                        if chatrooms[room_name_udp]['host'] == sender_username:
+                            # まず全メンバーのトークンをリスト化（安全に削除するため）
+                            users_to_remove = list(chatrooms[room_name_udp]['users'].keys())
+
+                            # 各メンバーに退出通知を送信
+                            for token in users_to_remove:
+                                user_info = chatrooms[room_name_udp]['users'][token]
+                                username_to_notify = user_info['username']
+                                user_address = user_info.get('address', None)
+
+                                if user_address:
+                                    # 各ユーザーに退出通知を送信
+                                    broadcast_udp_message(
+                                        room_name_udp,
+                                        "Server",
+                                        f"---host {sender_username} has left the chat ---",
+                                        exclude_addr=user_address
+                                    )
+
+                            # ルームから全ユーザー削除
+                            for token in users_to_remove:
+                                del chatrooms[room_name_udp]['users'][token]
+
+                            # 最後にルームを削除
+                            del chatrooms[room_name_udp]
+
+                        # ホスト以外のユーザーが退出した場合
+                        else:
+                            if usernametoken_udp in chatrooms[room_name_udp]['users']:
+                                del chatrooms[room_name_udp]['users'][usernametoken_udp]
                     else:
                         # 通常のチャットメッセージをルーム内にブロードキャスト
                         broadcast_udp_message(room_name_udp, sender_username, message_content, exclude_addr = client_addr)
